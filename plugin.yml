@@ -1,0 +1,10 @@
+name: FastFurnace
+main: hm\FastFurnace\FastFurnace
+version: 4.0-alpha
+author: hmm
+api:
+- 1.0.0
+- 1.4.1
+- 1.12.0
+- 1.13.0
+- 2.0.0
