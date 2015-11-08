@@ -3,12 +3,12 @@
 namespace hm\FastFurnace;
 
 use pocketmine\event\player\PlayerInteractEvent;
-use pocketmine\event\block\BlockPlaceEvent;
 use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\item\Item;
 use pocketmine\utils\TextFormat;
 use pocketmine\utils\Config;
+use pocketmine\Player;
 
 class FastFurnace extends PluginBase implements Listener {
 	public $ymlfile, $coal_cache;
@@ -29,9 +29,12 @@ class FastFurnace extends PluginBase implements Listener {
 			365 => 366 
 	);
 	public function onEnable() {
-		$this->getServer ()->getPluginManager ()->registerEvents ( $this, $this );
+		@mkdir ( $this->getDataFolder () );
+		
 		$this->ymlfile = new Config ( $this->getDataFolder () . "cache.yml", Config::YAML, [ ] );
 		$this->coal_cache = $this->ymlfile->getAll ();
+		
+		$this->getServer ()->getPluginManager ()->registerEvents ( $this, $this );
 	}
 	public function onDisable() {
 		$this->ymlfile->setAll ( $this->coal_cache );
@@ -42,49 +45,47 @@ class FastFurnace extends PluginBase implements Listener {
 		$player = $event->getPlayer ();
 		$item = $event->getItem ()->getID ();
 		
-		if ($block->getID () == Item::FURNACE or $block->getID () == Item::BURNING_FURNACE) {
-			$event->setCancelled ( true );
-			if (isset ( $this->recipes [$item] )) {
-				$coal = 0;
-				
-				foreach ( $player->getInventory ()->getContents () as $inven ) {
-					if (! $inven instanceof Item)
-						return;
-					if ($inven->getID () == Item::COAL) {
-						$coal = $inven->getCount ();
-						break;
-					}
-				}
-				if ($coal == Item::AIR and $item != Item::WOOD and ! isset ( $this->coal_cache [$player->getName ()] )) {
-					$player->sendMessage ( TextFormat::DARK_AQUA . "석탄이 없습니다 ! ( 원목으로 목탄을 만드세요 ! )" );
-				} else {
-					$player->getInventory ()->addItem ( Item::get ( $this->recipes [$item] ) );
-					$player->getInventory ()->removeItem ( Item::get ( $item, $event->getItem ()->getDamage () ) );
-					if ($item != Item::WOOD) {
-						if (! isset ( $this->coal_cache [$player->getName ()] )) {
-							$player->getInventory ()->removeItem ( Item::get ( Item::COAL ) );
-							$this->coal_cache [$player->getName ()] = 3;
-						} else {
-							$this->coal_cache [$player->getName ()] --;
-							if ($this->coal_cache [$player->getName ()] == 0)
-								unset ( $this->coal_cache [$player->getName ()] );
-						}
-					}
-					$player->sendMessage ( TextFormat::DARK_AQUA . "성공적으로 구워졌습니다. (인벤토리 확인)" );
-				}
+		if ($block->getID () != Item::FURNACE and $block->getID () != Item::BURNING_FURNACE)
+			return;
+		
+		$event->setCancelled ( true );
+		
+		if (! isset ( $this->recipes [$item] )) {
+			$player->sendMessage ( TextFormat::DARK_AQUA . "조합할 물건으로 터치시 조합 가능합니다 !" );
+			return;
+		}
+		
+		$coal = $this->getCoalCount ( $player );
+		
+		if ($coal == 0 and $item != Item::WOOD and ! isset ( $this->coal_cache [$player->getName ()] )) {
+			$player->sendMessage ( TextFormat::DARK_AQUA . "석탄이 없습니다 ! ( 원목으로 목탄을 만드세요 ! )" );
+			return;
+		}
+		
+		$player->getInventory ()->addItem ( Item::get ( $this->recipes [$item] ) );
+		$player->getInventory ()->removeItem ( Item::get ( $item, $event->getItem ()->getDamage () ) );
+		if ($item != Item::WOOD) {
+			if (! isset ( $this->coal_cache [$player->getName ()] )) {
+				$player->getInventory ()->removeItem ( Item::get ( Item::COAL ) );
+				$this->coal_cache [$player->getName ()] = 3;
 			} else {
-				$player->sendMessage ( TextFormat::DARK_AQUA . "조합할 물건으로 터치시 조합 가능합니다 !" );
-			}
-			if ($event->getItem ()->isPlaceable ()) {
-				$this->PlacePrevent [$player->getName ()] = true;
+				$this->coal_cache [$player->getName ()] --;
+				if ($this->coal_cache [$player->getName ()] == 0)
+					unset ( $this->coal_cache [$player->getName ()] );
 			}
 		}
+		$player->sendMessage ( TextFormat::DARK_AQUA . "성공적으로 구워졌습니다. (인벤토리 확인)" );
 	}
-	public function onPlace(BlockPlaceEvent $event) {
-		$username = $event->getPlayer ()->getName ();
-		if (isset ( $this->PlacePrevent [$username] )) {
-			$event->setCancelled ( true );
-			unset ( $this->PlacePrevent [$username] );
+	public function getCoalCount(Player $player) {
+		$coal = 0;
+		
+		foreach ( $player->getInventory ()->getContents () as $inven ) {
+			if (! $inven instanceof Item)
+				continue;
+			if ($inven->getID () == Item::COAL)
+				$coal += $inven->getCount ();
 		}
+		
+		return $coal;
 	}
 }
